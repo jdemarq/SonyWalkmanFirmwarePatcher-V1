@@ -1,4 +1,10 @@
-# Sony Walkman Firmware Patcher — fork with V1 (NWZ-A10 / NW-A16) support
+# Sony Walkman Firmware Patcher — V1 (DES) edition
+
+**Unpack, inspect, modify, re-sign and repack Sony Walkman `.UPG` firmware
+updates with V1 (DES) encryption** — the NWZ-A10 generation and older (NWZ-A10 /
+NW-A16 / NW-A17, NW-A20, NWZ-E4xx/E5xx, NWZ-S7xx, NWZ-X1000, NW-ZX100…).
+Tested on a **Japanese NW-A16**. Fork of roobscoob's V2-only patcher; V2 support
+is kept as it was.
 
 > **This fork** adds **V1 (DES) update packages** to roobscoob's patcher, so it
 > works on the NWZ-A10 generation and older — tested on a **Japanese NW-A16**.
@@ -136,4 +142,4 @@ it will also attempt to run the injector on this modified binary, by copying the
 
 While this script was orignally made for my use, i'd love to work with people to reduce and modularize these assumptions.
 
-## [Documentation on the UPG files](./upgDocs.md)
+## [Documentation on the UPG files](./upgDocs.md) — now with the V1 format
