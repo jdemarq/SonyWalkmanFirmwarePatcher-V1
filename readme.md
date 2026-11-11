@@ -19,8 +19,9 @@
 > ⚠️ **Tested only on a Japanese NW-A16** (NW-A10 series, firmware 1.21.02).
 > Other V1 models are listed because they share the format, **not because they
 > were tried**. Sony's international NWZ-A10 package was checked **offline only**
-> (opens and repacks byte-identical) — never flashed. **V2 code is unchanged and
-> untested here.** Flashing modified firmware can brick a player.
+> (opens and repacks byte-identical) — never flashed. **V2 is untested here**: its
+> code is unchanged except the shared `setFile()` size/offset fix, which no V2
+> package has exercised. Flashing modified firmware can brick a player.
 
 Companion project: [jdemarq/NW-A16-Firmware-Mod](https://github.com/jdemarq/NW-A16-Firmware-Mod).
 
