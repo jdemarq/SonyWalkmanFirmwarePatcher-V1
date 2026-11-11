@@ -32,6 +32,32 @@ runs. To start the update, use Rockbox's `scsitool <drive> do_fw_upgrade`
 (the bundled Windows injector is ZX300-only). Flashing modified firmware can
 brick a player — keep an official package of your region at hand.
 
+## Commands (non-interactive)
+
+```sh
+npx ts-node index info    FW.UPG                       # read-only: key/region (auto-detected), files, types, sha256, anti-brick check
+npx ts-node index extract FW.UPG out/                  # out/<n>.bin + manifest.json
+npx ts-node index pack    out/ FW_MOD.UPG [--force]    # V1: rebuild (only changed files differ)
+npx ts-node index rekey   FW.UPG nw-a16-jp FW_JP.UPG   # V1: re-sign for another region's key
+```
+
+- **Key auto-detection**: every known KAS is tried until the signature matches,
+  so you never have to guess the region (a wrong-region package is refused by
+  the player before its script runs). `--model <name>` forces one.
+- **Anti-brick check** (`pack`, `rekey`, shown by `info`): a V1 installer
+  script must clear the update flag first (`nvpflag fup 0xFFFFFFFF`) — then a
+  failing script leaves the player booting normally instead of looping into
+  update mode. `pack`/`rekey` **refuse to write** otherwise, unless `--force`.
+  Sony's own full-system installers clear `fup` only on success, at the end:
+  `info` says so explicitly; re-signing one needs `--force`.
+- **`rekey` self-checks** the output: it opens with the new key, is refused by
+  the old one, and every file is identical.
+- `pack` from a directory is V1-only; for V2 use the interactive mode.
+
+Checked: `pack` of an unmodified extraction and `rekey` series→JP reproduce
+known packages **byte for byte**; `pack` refuses a script that does not clear
+`fup` first (exit 1, nothing written).
+
 ## Tests
 
 `npm test -- <dir>` (`test/v1.ts`) checks, on packages whose bytes are known

@@ -4,8 +4,10 @@ import { Upg } from "./src/upg";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { runCli } from "./src/cli";
 
-// Usage: ts-node index <model> [file.UPG]
+// Usage: ts-node index info|extract|pack|rekey ...   (see src/cli.ts)
+//    or: ts-node index <model> [file.UPG]   (interactive, original behaviour)
 //   model: a name from src/upg/constants.ts, e.g. nw-zx300, nwz-a10, nw-a16-jp
 //   file : defaults to ./FW.UPG
 // Unpacks every file into ./bins/<n>.bin, waits for you to edit them, then
@@ -25,6 +27,14 @@ const keypress = async () => {
 }
 
 (async () => {
+  // Non-interactive commands first: info / extract / pack / rekey (see src/cli.ts)
+  try {
+    if (runCli(process.argv.slice(2))) process.exit(0);
+  } catch (e) {
+    console.error("error: " + (e as Error).message);
+    process.exit(1);
+  }
+
   const modelName = process.argv[2] || "nw-zx300";
   const fwFile = process.argv[3] || "./FW.UPG";
   const zx300 = modelName.toLowerCase() === "nw-zx300";

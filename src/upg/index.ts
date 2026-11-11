@@ -58,6 +58,34 @@ export class Upg {
     return new Upg(blob, fileTable, header, kas);
   }
 
+  /**
+   * Build a V1 package from scratch (same layout as Sony's and Rockbox's):
+   * MD5 | DES(sig[8] count[4] pad[4] | table count*{offset,size} | blobs padded to 8).
+   * Table offsets are absolute file offsets; sizes are the real sizes.
+   */
+  static createV1(model: Model, files: Buffer[]): Upg {
+    const kas = getKeyAndSignatureFromModel(model);
+    if (kas.getKey().length !== 8) throw new Error(`createV1: ${model.name} is not a V1 model`);
+    const n = files.length;
+    const header = Buffer.alloc(16);
+    kas.getSignature().copy(header, 0);
+    header.writeUInt32LE(n, 8);
+    let offset = 16 + 16 + 8 * n;
+    const table = Buffer.alloc(8 * n);
+    const blobs: Buffer[] = [];
+    files.forEach((f, i) => {
+      table.writeUInt32LE(offset, 8 * i);
+      table.writeUInt32LE(f.length, 8 * i + 4);
+      const padded = Buffer.alloc(roundUp(f.length, 8));
+      f.copy(padded);
+      blobs.push(padded);
+      offset += padded.length;
+    });
+    const enc = kas.encrypt(Buffer.concat([header, table, ...blobs]));
+    const md5 = crypto.createHash("md5").update(enc).digest();
+    return Upg.fromBinary(Buffer.concat([md5, enc]), model);
+  }
+
   private constructor(
     protected blob: Buffer,
     protected fileTable: { offset: number, size: number }[],
@@ -68,6 +96,9 @@ export class Upg {
   getFileCount(): number {
     return this.header.fileCount;
   }
+
+  /** Real (unpadded) size of file i, from the table. */
+  getFileSize(i: number): number { return this.fileTable[i].size; }
 
   getVersion(): number {
     return this.header.version;

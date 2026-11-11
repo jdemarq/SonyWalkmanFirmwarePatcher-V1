@@ -48,5 +48,16 @@ if (has("payload-fix2.tar")) {
   check("setFile(0, 4045 B) round-trips and file 1 is intact", f0.equals(script) && f1.equals(orig1));
 }
 
+// 6. createV1 reproduces known packages; lint accepts ours, flags Sony's, refuses a bad script
+{
+  const { lintInstallerScript } = require("../src/upg/utils");
+  const src = Upg.fromBinary(rd("NW_WM_FW-install-bootmenu-JPKAS.UPG"), findModel("nw-a16-jp"));
+  const files = [0, 1].map(i => src.getFile(i, false).slice(0, src.getFileSize(i)));
+  check("createV1(nw-a16-jp, files) == install-JPKAS byte for byte",
+        Upg.createV1(findModel("nw-a16-jp"), files).toBinary().equals(rd("NW_WM_FW-install-bootmenu-JPKAS.UPG")));
+  check("lint: our installer passes", lintInstallerScript(files[0]).ok);
+  check("lint: a script not clearing fup first is flagged", !lintInstallerScript(Buffer.from("#!/bin/sh\necho hi\nnvpflag fup 0xFFFFFFFF\n")).ok);
+}
+
 if (failed) { console.log(`${failed} FAILED`); process.exit(1); }
 console.log("all V1 checks passed");
