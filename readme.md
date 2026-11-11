@@ -1,3 +1,100 @@
+# Sony Walkman Firmware Patcher — V1 (DES) edition
+
+> **Forked from [roobscoob/SonyWalkmanFirmwarePatcher](https://github.com/roobscoob/SonyWalkmanFirmwarePatcher)**
+> (V2/AES only, NW-ZX300), by jdemarq. All credit for the original tool and the
+> V2 work goes to its author; the V1 format follows Rockbox's `nwztools`
+> (Amaury Pouly, Marcin Bukat).
+
+**Added in this fork:**
+- support for **V1 (DES)** `.UPG` packages (NWZ-A10 generation and older): decrypt,
+  modify, re-encrypt, repack;
+- the **Japanese NW-A10 key** (`nw-a16-jp`) — V1 package keys are per region;
+- commands **`info`** (read-only), **`extract`** / **`pack`**, **`rekey`**
+  (re-sign for another region), with **automatic key detection**;
+- an **anti-brick check** that refuses to write a custom installer script that does
+  not clear the update flag first;
+- fixes that V1 needs (version detection, `setFile()` sizes and offsets), a
+  `tsconfig.json`, tests, and the **V1 format** in [upgDocs.md](./upgDocs.md).
+
+> ⚠️ **Tested only on a Japanese NW-A16** (NW-A10 series, firmware 1.21.02).
+> Other V1 models are listed because they share the format, **not because they
+> were tried**. Sony's international NWZ-A10 package was checked **offline only**
+> (opens and repacks byte-identical) — never flashed. **V2 is untested here**: its
+> code is unchanged except the shared `setFile()` size/offset fix, which no V2
+> package has exercised. Flashing modified firmware can brick a player.
+
+Companion project: [jdemarq/NW-A16-Firmware-Mod](https://github.com/jdemarq/NW-A16-Firmware-Mod).
+
+## What the fork changes
+
+| | upstream | this fork |
+|---|---|---|
+| V1 decryption | `"V1 encryption not supported"` | DES-ECB via `des.js` (pure JS; Node's OpenSSL 3 refuses `des-ecb`), KAS → key/sig exactly as Rockbox's `upg.c` |
+| version detection | key length `== 4` → V1 (never true: V1 keys are 8 bytes) | key length `== 8` → V1 |
+| `setFile()` | V1: throws; stored the **padded** size and laid out later files with it | table keeps the **real** size, blob padded to the block (8/16), later offsets shifted by the exact delta — required for V1, whose sizes are not multiples of 8 |
+| keys | `nwz-a10` (international) | + **`nw-a16-jp`** — the A10 package key is **per region**: Japanese units/packages use `18a8b9bf…`, read from a NW-A16 and confirmed on Sony's Japanese 1.21 package (sig `f132af27`) |
+| `index.ts` | hard-wired to NW-ZX300, compared Buffers with `==` (always false) | `ts-node index <model> [file.UPG]`; ZX300 steps (compressed sector 6, its hash in sector 1, Windows injector) only for `nw-zx300`; `.equals()` |
+| build | README says `tsc -p .` but no `tsconfig.json` | `tsconfig.json` added |
+
+## Usage (V1 players)
+
+```sh
+npm i
+npx ts-node index nw-a16-jp NW_WM_FW.UPG     # Japanese NW-A16/A17
+npx ts-node index nwz-a10   NW_WM_FW.UPG     # international NWZ-A10 series (offline-checked only)
+```
+
+Files are unpacked to `./bins/<n>.bin`; edit, press Enter, get `./FW_MOD.UPG`.
+On a V1 package, sector 0 is the installer shell script, 1 the kernel, 2 the
+gzip'd root filesystem tar. **Use the key of your unit's region**: a package
+signed with the other region's key is rejected by the player before its script
+runs. To start the update, use Rockbox's `scsitool <drive> do_fw_upgrade`
+(the bundled Windows injector is ZX300-only). Flashing modified firmware can
+brick a player — keep an official package of your region at hand.
+
+## Commands (non-interactive)
+
+```sh
+npx ts-node index info    FW.UPG                       # read-only: key/region (auto-detected), files, types, sha256, anti-brick check
+npx ts-node index extract FW.UPG out/                  # out/<n>.bin + manifest.json
+npx ts-node index pack    out/ FW_MOD.UPG [--force]    # V1: rebuild (only changed files differ)
+npx ts-node index rekey   FW.UPG nw-a16-jp FW_JP.UPG   # V1: re-sign for another region's key
+```
+
+- **Key auto-detection**: every known KAS is tried until the signature matches,
+  so you never have to guess the region (a wrong-region package is refused by
+  the player before its script runs). `--model <name>` forces one.
+- **Anti-brick check** (`pack`, `rekey`, shown by `info`): a V1 installer
+  script must clear the update flag first (`nvpflag fup 0xFFFFFFFF`) — then a
+  failing script leaves the player booting normally instead of looping into
+  update mode. `pack`/`rekey` **refuse to write** otherwise, unless `--force`.
+  Sony's own full-system installers clear `fup` only on success, at the end:
+  `info` says so explicitly; re-signing one needs `--force`.
+- **`rekey` self-checks** the output: it opens with the new key, is refused by
+  the old one, and every file is identical.
+- `pack` from a directory is V1-only; for V2 use the interactive mode.
+
+Checked: `pack` of an unmodified extraction and `rekey` series→JP reproduce
+known packages **byte for byte**; `pack` refuses a script that does not clear
+`fup` first (exit 1, nothing written).
+
+## Tests
+
+`npm test -- <dir>` (`test/v1.ts`) checks, on packages whose bytes are known
+independently:
+- Japanese-key packages open with `nw-a16-jp` and are **rejected** with `nwz-a10`;
+- unpack + repack unchanged is **byte-identical**;
+- `setFile()` on the payload reproduces, **byte for byte**, a package built by a
+  separate Python packer; a non-multiple-of-8 replacement round-trips and leaves
+  the next file intact.
+
+Also checked: Sony's official international NWZ-A10 1.21 package (58 MB) opens
+with `nwz-a10` and repacks byte-identical (≈3 s).
+
+---
+
+*Original README below.*
+
 # Sony Walkman Firmware Patcher
 
 This tool is a utility for patching firmware updates for sony walkman devices.
@@ -59,4 +156,4 @@ it will also attempt to run the injector on this modified binary, by copying the
 
 While this script was orignally made for my use, i'd love to work with people to reduce and modularize these assumptions.
 
-## [Documentation on the UPG files](./upgDocs.md)
+## [Documentation on the UPG files](./upgDocs.md) — now with the V1 format

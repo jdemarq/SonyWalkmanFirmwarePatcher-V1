@@ -10,7 +10,12 @@ export const AES_PASSKEY = Buffer.from("9cc4419c8bef488c", "utf-8");
 export const AES_IV = Buffer.from("6063ce1efa1d543a", "utf-8")
 
 export const MODEL_LIST: Model[] = [
+  // NWZ-A10 series, INTERNATIONAL packages (e.g. NWZ-A15/A17 1.21) — Rockbox's value
   { name: "nwz-a10", confirmed: true, kas: "2572f4a7b8c1a08aeb5142ce9cb834d6" },
+  // NW-A10 series, JAPANESE units/packages (NW-A16/NW-A17 1.21 from sony.jp).
+  // Read from a Japanese NW-A16 (get_dnk_nvp kas) and confirmed on Sony's
+  // Japanese package (sig f132af27); the key is per region, not per series.
+  { name: "nw-a16-jp", confirmed: true, kas: "18a8b9bf121554408c60d2e67338a6d4" },
   { name: "nw-a20", confirmed: true, kas: "d91a61c7263bafc626e9a5b66f983c0b" },
   { name: "nwz-e350", confirmed: true, kas: "8a01b624bfbfde4a1662a1772220e3c5" },
   { name: "nwz-e450", confirmed: true, kas: "8a01b624bfbfde4a1662a1772220e3c5" },

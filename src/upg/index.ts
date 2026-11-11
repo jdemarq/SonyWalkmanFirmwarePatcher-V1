@@ -29,7 +29,8 @@ export class Upg {
       throw new Error("MD5 Mismatch");
 
     const kas = getKeyAndSignatureFromModel(model);
-    const version = kas.getKey().length == 4 ? 1 : 2;
+    // V1 keys are 8 bytes (DES), V2 keys 16 bytes (AES)
+    const version = kas.getKey().length == 8 ? 1 : 2;
     const headerSize = version === 1 ? 16 : 32;
     const headerBinary = kas.decrypt(blob.slice(16, 16 + headerSize));
     const header: Header = {
@@ -57,6 +58,34 @@ export class Upg {
     return new Upg(blob, fileTable, header, kas);
   }
 
+  /**
+   * Build a V1 package from scratch (same layout as Sony's and Rockbox's):
+   * MD5 | DES(sig[8] count[4] pad[4] | table count*{offset,size} | blobs padded to 8).
+   * Table offsets are absolute file offsets; sizes are the real sizes.
+   */
+  static createV1(model: Model, files: Buffer[]): Upg {
+    const kas = getKeyAndSignatureFromModel(model);
+    if (kas.getKey().length !== 8) throw new Error(`createV1: ${model.name} is not a V1 model`);
+    const n = files.length;
+    const header = Buffer.alloc(16);
+    kas.getSignature().copy(header, 0);
+    header.writeUInt32LE(n, 8);
+    let offset = 16 + 16 + 8 * n;
+    const table = Buffer.alloc(8 * n);
+    const blobs: Buffer[] = [];
+    files.forEach((f, i) => {
+      table.writeUInt32LE(offset, 8 * i);
+      table.writeUInt32LE(f.length, 8 * i + 4);
+      const padded = Buffer.alloc(roundUp(f.length, 8));
+      f.copy(padded);
+      blobs.push(padded);
+      offset += padded.length;
+    });
+    const enc = kas.encrypt(Buffer.concat([header, table, ...blobs]));
+    const md5 = crypto.createHash("md5").update(enc).digest();
+    return Upg.fromBinary(Buffer.concat([md5, enc]), model);
+  }
+
   private constructor(
     protected blob: Buffer,
     protected fileTable: { offset: number, size: number }[],
@@ -67,6 +96,9 @@ export class Upg {
   getFileCount(): number {
     return this.header.fileCount;
   }
+
+  /** Real (unpadded) size of file i, from the table. */
+  getFileSize(i: number): number { return this.fileTable[i].size; }
 
   getVersion(): number {
     return this.header.version;
@@ -112,37 +144,34 @@ export class Upg {
   }
 
   setFile(index: number, binary: Buffer, compress: boolean = false): void {
-    switch(this.getVersion()) {
-      case 1: throw new Error("CRY ABOUT IT"); break;
-      case 2: this.kas.resetToCbc();
-    }
+    if (this.getVersion() == 2) this.kas.resetToCbc();
 
     if (compress)
       binary = this.compress(binary);
 
-    const properLength = roundUp(binary.length, this.getVersion() === 1 ? 8 : 16);
-
-    if (binary.length != properLength) {
-      const newB = Buffer.alloc(properLength);
-      binary.copy(newB);
-      binary = newB;
-    }
-
-    const encrypt = this.kas.encrypt(binary);
+    // The table stores the REAL size; the blob is padded to the cipher block.
+    // (Upstream stored the padded size and laid out later files with it, which
+    // corrupts V1 packages, whose sizes are not multiples of 8.)
+    const block = this.getVersion() === 1 ? 8 : 16;
+    const realSize = binary.length;
+    const padded = Buffer.alloc(roundUp(realSize, block));
+    binary.copy(padded);
+    const encrypt = this.kas.encrypt(padded);
 
     const { offset: oldOffset, size: oldSize } = this.fileTable[index];
-    const v = this.blob.slice(oldOffset, oldOffset + roundUp(oldSize, this.getVersion() == 1 ? 8 : 16));
+    const oldPadded = roundUp(oldSize, block);
 
-    const dataBeforeIndex = this.blob.slice(0, oldOffset);
-    const dataAfterIndex = this.blob.slice(oldOffset + oldSize);
+    this.blob = Buffer.concat([
+      this.blob.slice(0, oldOffset),
+      encrypt,
+      this.blob.slice(oldOffset + oldPadded),
+    ]);
 
-    this.blob = Buffer.concat([dataBeforeIndex, encrypt, dataAfterIndex]);
-    let currentIndex = oldOffset;
-    this.fileTable[index] = { offset: currentIndex, size: encrypt.length }
-
-    for (let i = index; i < this.fileTable.length; i++) {
-      this.fileTable[i] = { offset: currentIndex, size: this.fileTable[i].size };
-      currentIndex += this.fileTable[i].size;
+    const delta = encrypt.length - oldPadded;
+    this.fileTable[index] = { offset: oldOffset, size: realSize };
+    for (let i = 0; i < this.fileTable.length; i++) {
+      if (i !== index && this.fileTable[i].offset > oldOffset)
+        this.fileTable[i] = { offset: this.fileTable[i].offset + delta, size: this.fileTable[i].size };
     }
   }
 
