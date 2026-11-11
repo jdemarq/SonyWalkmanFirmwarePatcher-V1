@@ -1,15 +1,28 @@
 # Sony Walkman Firmware Patcher — V1 (DES) edition
 
-**Unpack, inspect, modify, re-sign and repack Sony Walkman `.UPG` firmware
-updates with V1 (DES) encryption** — the NWZ-A10 generation and older (NWZ-A10 /
-NW-A16 / NW-A17, NW-A20, NWZ-E4xx/E5xx, NWZ-S7xx, NWZ-X1000, NW-ZX100…).
-Tested on a **Japanese NW-A16**. Fork of roobscoob's V2-only patcher; V2 support
-is kept as it was.
+> **Forked from [roobscoob/SonyWalkmanFirmwarePatcher](https://github.com/roobscoob/SonyWalkmanFirmwarePatcher)**
+> (V2/AES only, NW-ZX300), by jdemarq. All credit for the original tool and the
+> V2 work goes to its author; the V1 format follows Rockbox's `nwztools`
+> (Amaury Pouly, Marcin Bukat).
 
-> **This fork** adds **V1 (DES) update packages** to roobscoob's patcher, so it
-> works on the NWZ-A10 generation and older — tested on a **Japanese NW-A16**.
-> Upstream only handled V2 (AES) devices. Companion project:
-> [jdemarq/NW-A16-Firmware-Mod](https://github.com/jdemarq/NW-A16-Firmware-Mod).
+**Added in this fork:**
+- support for **V1 (DES)** `.UPG` packages (NWZ-A10 generation and older): decrypt,
+  modify, re-encrypt, repack;
+- the **Japanese NW-A10 key** (`nw-a16-jp`) — V1 package keys are per region;
+- commands **`info`** (read-only), **`extract`** / **`pack`**, **`rekey`**
+  (re-sign for another region), with **automatic key detection**;
+- an **anti-brick check** that refuses to write a custom installer script that does
+  not clear the update flag first;
+- fixes that V1 needs (version detection, `setFile()` sizes and offsets), a
+  `tsconfig.json`, tests, and the **V1 format** in [upgDocs.md](./upgDocs.md).
+
+> ⚠️ **Tested only on a Japanese NW-A16** (NW-A10 series, firmware 1.21.02).
+> Other V1 models are listed because they share the format, **not because they
+> were tried**. Sony's international NWZ-A10 package was checked **offline only**
+> (opens and repacks byte-identical) — never flashed. **V2 code is unchanged and
+> untested here.** Flashing modified firmware can brick a player.
+
+Companion project: [jdemarq/NW-A16-Firmware-Mod](https://github.com/jdemarq/NW-A16-Firmware-Mod).
 
 ## What the fork changes
 
@@ -27,7 +40,7 @@ is kept as it was.
 ```sh
 npm i
 npx ts-node index nw-a16-jp NW_WM_FW.UPG     # Japanese NW-A16/A17
-npx ts-node index nwz-a10   NW_WM_FW.UPG     # international NWZ-A10 series
+npx ts-node index nwz-a10   NW_WM_FW.UPG     # international NWZ-A10 series (offline-checked only)
 ```
 
 Files are unpacked to `./bins/<n>.bin`; edit, press Enter, get `./FW_MOD.UPG`.
