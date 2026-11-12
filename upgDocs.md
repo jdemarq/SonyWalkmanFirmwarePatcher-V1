@@ -49,36 +49,56 @@ There are 2 encryption "versions" reffered here as "v1" and "v2". V2 is document
 
 ### V1 Encryption (NWZ-A10 generation and older) — added in this fork
 
-Measured on Sony's NWZ-A10 1.21 packages (international and Japanese) and on a
-Japanese NW-A16. Same algorithm as Rockbox's `utils/nwztools/upgtools/upg.c`.
+Measured on Sony's NWZ-A10 1.21 packages (international and Japanese), on a Japanese
+NW-A16, and cross-checked on a Sony NWZ-E580 1.02 package. Same algorithm as
+Rockbox's `utils/nwztools/upgtools/upg.c`.
 
 - **Cipher: single DES, ECB, everywhere** — header, data table and data blobs
   alike. No CBC, no IV, so a V1 package can be decrypted in one pass from byte 16.
-- **Key and signature from the KAS**: the KAS is 16 bytes (32 hex chars).
-  `DES-ECB-decrypt(KAS, key = "ed295076")` gives 16 bytes: the first 8 are the
-  **key**, the next 8 the **signature**. Both are printable ASCII
-  (e.g. `ec2889e3` / `f62ced8a` for the NWZ-A10 international key).
+- **KAS → key + signature.** The KAS is the 16-byte (32 hex char) per-device secret.
+  Decrypt it with single DES-ECB under the constant passkey `ed295076`:
+  `DES-ECB-decrypt(key = "ed295076", KAS)` → 16 bytes = **8-byte key** ∥ **8-byte
+  signature**. Unlike V2, there is no CBC and no IV in this step. Both results are
+  8 printable-ASCII characters. Keep the three values distinct: the **KAS** is what
+  is stored / recovered and what a player reports in its `kas` NVP node; the **key**
+  decrypts the package; the **signature** is what must appear at file offset 16.
+
+  | model | KAS (stored, 32 hex) | key (8 B ASCII) | signature (8 B ASCII) |
+  |---|---|---|---|
+  | NWZ-A10 international | `2572f4a7b8c1a08aeb5142ce9cb834d6` | `ec2889e3` | `f62ced8a` |
+  | NW-A16 / A17 Japanese | `18a8b9bf121554408c60d2e67338a6d4` | `88d26023` | `f132af27` |
+  | NWZ-E580 | `6e25f79812eca7ceed04819d833e80af` | `a70807da` | `97e8ce46` |
+
+- **Verifying the key.** A tool knows it has the right KAS when the 8 bytes it
+  decrypts at file offset 16 equal the derived signature. A player makes the same
+  check and **rejects a package signed for another device before running its
+  script**, so a wrong key is caught safely, not by a brick.
 - **Layout** (offsets in the file, the encrypted region starts at 16):
 
   | offset | size | content |
   |---|---|---|
-  | 0 | 16 | MD5 of bytes 16..end (encrypted) |
+  | 0 | 16 | MD5 of bytes 16..end (i.e. of the *encrypted* payload) |
   | 16 | 8 | signature |
   | 24 | 4 | `UInt32LE` file count |
   | 28 | 4 | padding |
   | 32 | 8 × count | table: `UInt32LE offset`, `UInt32LE size` |
-  | … | | blobs, each padded with zeros to a multiple of 8 |
+  | … | | blobs, each zero-padded to a multiple of 8 |
 
   Table **offsets are absolute file offsets**; **sizes are the real, unpadded
-  sizes** (e.g. 2 120 and 54 209 509 bytes in Sony's package). A tool that stores
-  padded sizes, or lays out later blobs with real sizes, corrupts V1 packages.
-- **Keys are per region, not only per series.** Sony's international NWZ-A10
-  package opens only with `2572f4a7…` (sig `f62ced8a`); its **Japanese** NW-A16/A17
-  package only with `18a8b9bf…` (sig `f132af27`) — the value a Japanese NW-A16
-  reports for its `kas` NVP node. A player rejects a package signed for the other
-  region **before** running its script.
+  sizes** (e.g. 2 120 and 54 209 509 bytes in Sony's A10 package). A tool that
+  stores padded sizes, or lays out later blobs using real sizes instead of the
+  padded length, corrupts V1 packages. The MD5 at offset 0 is computed over the
+  encrypted bytes, so it is updated *after* re-encrypting, not before.
+
+- **Keys are per model/region, not only per series.** The three examples above are
+  three different keys for the same V1 format. Sony's international NWZ-A10 package
+  opens only with the A10-international key; its **Japanese** NW-A16/A17 package only
+  with the Japanese key (the value a Japanese NW-A16 reports in its `kas` NVP node);
+  the NWZ-E580 only with its own. The container format itself is identical across all
+  of them (verified byte-for-byte on A10 and E580 packages).
 - **Sectors of an NWZ-A10 package**: 0 = installer shell script (`/bin/sh`),
-  1 = kernel (4 259 840 B), 2 = gzip'd tar of the root filesystem.
+  1 = kernel (4 259 840 B), 2 = gzip'd tar of the root filesystem. (An NWZ-E580
+  package has the same three-sector shape: script, kernel, gzip'd rootfs tar.)
 - **Update-flag rule (anti-brick)**: the update is triggered by the `fup` NVP flag.
   Sony's installer clears it only on success (`nvpflag fup 0` at the end);
   Rockbox-style scripts clear it first (`nvpflag fup 0xFFFFFFFF`), so a failing
